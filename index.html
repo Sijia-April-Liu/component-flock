@@ -693,7 +693,7 @@ class InkRenderer {
     const boxBottom = box ? box.getBoundingClientRect().bottom + 8 : 0;
     const free = Math.max(0.4, 1 - boxBottom / window.innerHeight);   // share of the screen left below the box
     const dist = fit * 1.05 / cam.zoom / Math.sqrt(free);
-    const yaw = cam.yaw + Math.sin(clock * 0.002) * 0.12;          // gentle automatic sway
+    const yaw = cam.yaw;                                            // only changes when the user drags
     const e = [dist * Math.cos(cam.pitch) * Math.sin(yaw), -dist * Math.cos(cam.pitch) * Math.cos(yaw), dist * Math.sin(cam.pitch)];
     const shift = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -(1 - free) * 0.55, 0, 1];   // move the image down on screen
     const vp = M4.mul(shift, M4.mul(M4.perspective(fov, aspect, dist * 0.05, dist * 4), M4.lookAt(e, [0, 0, 0], [0, 0, 1])));
