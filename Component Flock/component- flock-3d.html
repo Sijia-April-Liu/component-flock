@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>偏旁 Flock 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<style>
+  :root { --ui: #c28c56; --ink: #c28c56; --paper: #efebe2; --accent: #c8321e; }
+  html, body { margin: 0; padding: 0; overflow: hidden; background: var(--paper); }
+  #stage { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+
+  /* ---------- Radical picker (top centre, framed) ---------- */
+  .picker-box {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box;
+    padding: 8px 12px 6px; border-radius: 14px;
+    border: 1px solid var(--ui);
+    background: color-mix(in srgb, var(--paper) 85%, transparent); backdrop-filter: blur(6px);
+    font: 600 11px/1.2 "Helvetica Neue", Helvetica, Arial, sans-serif;
+    letter-spacing: 0.06em; color: var(--ui); text-align: center; user-select: none;
+  }
+  .picker-box .hint { text-transform: uppercase; margin-bottom: 6px; }
+  .picker { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px; }
+  .picker .group { font-size: 10px; opacity: .55; text-transform: uppercase; margin: 0 6px 0 4px; }
+  .picker .break { flex-basis: 100%; height: 0; }
+  .picker .divider { width: 1px; height: 26px; background: var(--ui); opacity: .3; margin: 0 8px; }
+  .picker button {
+    all: unset; cursor: pointer; width: 38px; height: 38px;
+    display: grid; place-items: center; border-radius: 50%;
+    font: 26px/1 var(--font); color: var(--ui);
+    transition: background .2s, color .2s;
+  }
+  .picker button:hover { background: color-mix(in srgb, var(--ui) 8%, transparent); }
+  .picker button.on { color: var(--paper); background: var(--accent); }
+
+  /* ---------- Parameter panel (bottom-left) ---------- */
+  .panel {
+    position: fixed; left: 12px; bottom: 12px; padding: 10px 12px; border-radius: 10px;
+    background: color-mix(in srgb, var(--paper) 82%, transparent); backdrop-filter: blur(6px);
+    font: 600 12px/1 "Helvetica Neue", Helvetica, Arial, "PingFang SC", sans-serif;
+    letter-spacing: 0.06em; color: var(--ui); user-select: none;
+  }
+  .panel > button {
+    all: unset; cursor: pointer; display: block; margin-bottom: 10px;
+    border-bottom: 1px solid var(--ui); padding-bottom: 2px;
+  }
+  .panel.closed .rows { display: none; }
+  .row { display: grid; grid-template-columns: 88px 140px 44px; align-items: center; height: 24px; }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 120px; height: 1px; background: var(--ui); outline: none; margin: 0;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 11px; height: 11px; border-radius: 50%;
+    background: var(--ui); cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 11px; height: 11px; border: 0; border-radius: 50%; background: var(--ui); cursor: pointer;
+  }
+  .swatches, .fonts { display: flex; gap: 8px; align-items: center; }
+  input[type=color] {
+    -webkit-appearance: none; appearance: none; width: 18px; height: 18px;
+    border: 1px solid var(--ui); border-radius: 50%; padding: 0; background: none; cursor: pointer;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+  input[type=color]::-moz-color-swatch { border: 0; border-radius: 50%; }
+  .fonts button { all: unset; cursor: pointer; opacity: .4; }
+  .fonts button.on { opacity: 1; border-bottom: 1px solid var(--ui); }
+  .erase {
+    all: unset; cursor: pointer; display: block; margin-top: 10px; width: 100%; box-sizing: border-box;
+    text-align: center; padding: 6px 0; border: 1px solid var(--ui); border-radius: 6px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .erase:hover { background: color-mix(in srgb, var(--ui) 12%, transparent); }
+  .picker button.comp { width: 27px; height: 30px; font-size: 18px; }
+  .picker-box a { color: inherit; margin-left: 8px; opacity: .7; }
+
+  /* ---------- Intro (how to play) ---------- */
+  .intro {
+    position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px;
+    background: color-mix(in srgb, var(--paper) 70%, transparent); backdrop-filter: blur(8px);
+  }
+  .intro.hidden { display: none; }
+  .intro .card {
+    width: min(920px, 100%); max-height: calc(100vh - 48px); overflow: auto; box-sizing: border-box;
+    background: var(--paper); border: 1px solid var(--ui); border-radius: 16px; padding: 28px 32px;
+    font: 14px/1.55 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #2a2420;
+    box-shadow: 0 20px 60px rgba(0,0,0,.12);
+  }
+  .intro h1 { font: 600 30px/1.1 var(--font); margin: 0 0 4px; color: var(--ui); }
+  .intro h2 { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ui); margin: 22px 0 8px; }
+  .intro .sub { opacity: .7; margin: 0 0 6px; }
+  .intro ul { margin: 0; padding-left: 18px; }
+  .intro li { margin: 3px 0; }
+  .intro .rads { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .intro .rad { border: 1px solid color-mix(in srgb, var(--ui) 35%, transparent); border-radius: 10px; padding: 8px 10px; }
+  .intro .rad-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .intro .rad-h b { font: 26px/1 var(--font); color: var(--ui); }
+  .intro .rad-h span { font-size: 12px; opacity: .7; }
+  .intro .chars { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+  .intro .chars em { font: normal 18px/1 var(--font); color: var(--accent); margin-right: 3px; }
+  .intro .start {
+    all: unset; cursor: pointer; display: block; margin: 24px auto 0; padding: 10px 34px; border-radius: 999px;
+    background: var(--accent); color: var(--paper); font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  }
+
+  /* ---------- Meaning tooltip ---------- */
+  .tip {
+    position: fixed; z-index: 15; pointer-events: none; transform: translate(-50%, calc(-100% - 14px));
+    background: var(--paper); border: 1px solid var(--accent); border-radius: 10px; padding: 6px 10px;
+    font: 13px/1.3 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #2a2420; white-space: nowrap;
+    box-shadow: 0 6px 20px rgba(0,0,0,.12);
+  }
+  .tip b { font: 22px/1 var(--font); color: var(--accent); margin-right: 6px; vertical-align: -3px; }
+  .tip i { opacity: .65; margin-right: 6px; }
+  .tip.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+<div class="intro" id="intro"><div class="card" id="introCard"></div></div>
+<div class="tip hidden" id="tip"></div>
+<div class="picker-box">
+  <div class="hint">Click on Chinese character components to trigger attraction <a href="#" id="howto">How to play</a></div>
+  <div class="hint" style="opacity:.6;font-size:10px;margin-top:-3px">Select several · click again to release</div>
+  <div class="hint" style="opacity:.55;font-size:10px;margin-top:-2px">Drag the paper to rotate · scroll to zoom</div>
+  <div class="picker" id="picker"></div>
+</div>
+
+<div class="panel" id="panel">
+  <button id="toggle">Parameters</button>
+  <div class="rows">
+    <div class="row"><label>Count</label>
+      <input type="range" id="population" min="50" max="200" value="50"><output></output></div>
+    <div class="row"><label>Size</label>
+      <input type="range" id="size" min="30" max="120" value="70"><output></output></div>
+    <div class="row"><label>Speed</label>
+      <input type="range" id="speed" min="0.2" max="3" step="0.1" value="0.5"><output></output></div>
+    <div class="row"><label>Merge</label>
+      <input type="range" id="merge" min="0" max="100" value="20"><output></output></div>
+    <div class="row"><label>Evaporation</label>
+      <input type="range" id="evaporation" min="0" max="100" value="70"><output></output></div>
+    <div class="row"><label>Diffusion</label>
+      <input type="range" id="diffusion" min="0" max="100" value="50"><output></output></div>
+    <div class="row"><label>Colors</label>
+      <div class="swatches">
+        <input type="color" id="ink" value="#c28c56" title="Ink">
+        <input type="color" id="paper" value="#efebe2" title="Paper">
+        <input type="color" id="accent" value="#c8321e" title="Chosen component">
+      </div><span></span></div>
+    <div class="row"><label>Font</label>
+      <div class="fonts">
+        <button data-font="song" class="on">Serif</button>
+        <button data-font="brush">Brush</button>
+      </div><span></span></div>
+    <button class="erase" id="erase" title="Clear the ink and restore every setting">Erase · Reset</button>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   偏旁 FLOCK — Chinese character components as autonomous agents
+   Left, right, top, bottom and enclosing components.
+
+   Behaviour (unchanged): drift, separation, alignment, mouse repulsion,
+   and radical-calling attraction.
+
+   Rendering (new): every glyph is a blob of wet ink.
+     1. Glyphs are drawn into a hidden "mask".
+     2. The mask is blurred and cut at a threshold  → swollen, rounded
+        brush shapes; two glyphs that come close MERGE like ink drops,
+        and pull apart into separate drops again when they separate.
+     3. Each agent drags a brush path behind it. Fresh ink joins the same
+        glossy pool; as it ages, DIFFUSION widens it into a pale wash and
+        EVAPORATION slowly fades it — a long, soft tail.
+     4. The ink's "height" is used to light it → glossy, 3-D wet ink.
+   ===================================================================== */
+
+// ---------- Character data: radical → { component: character } ----------
+// A curated set: 26 radicals + 37 common components (most join 2+ radicals).
+const COMBOS = {
+  "氵": { 青: "清", 每: "海", 工: "江", 也: "池", 由: "油" },
+  "亻": { 也: "他", 木: "休", 寸: "付", 立: "位", 主: "住", 乍: "作" },
+  "扌": { 丁: "打", 巴: "把", 白: "拍", 合: "拾", 立: "拉" },
+  "木": { 每: "梅", 寸: "村", 主: "柱", 交: "校" },
+  "口": { 马: "吗", 巴: "吧", 未: "味", 古: "咕" },
+  "女": { 马: "妈", 也: "她", 子: "好", 古: "姑", 未: "妹" },
+  "讠": { 青: "请", 寸: "讨", 方: "访", 己: "记" },
+  "纟": { 工: "红", 田: "细", 合: "给", 戋: "线" },
+  "日": { 青: "晴", 寸: "时", 乍: "昨", 央: "映" },
+  "忄": { 青: "情", 白: "怕", 亡: "忙" },
+  "火": { 丁: "灯", 包: "炮", 因: "烟" },
+  "钅": { 戋: "钱", 中: "钟" },
+  // radicals on TOP (partner docks below)
+  "艹": { 化: "花", 古: "苦", 央: "英" },
+  "宀": { 子: "字", 女: "安", 至: "室", 木: "宋", 元: "完" },
+  "雨": { 田: "雷", 相: "霜", 令: "零", 包: "雹" },
+  // radicals at the BOTTOM (partner docks above)
+  "心": { 相: "想", 田: "思", 因: "恩" },
+  "灬": { 木: "杰", 者: "煮", 占: "点" },
+  "皿": { 合: "盒", 次: "盗" },
+  "土": { 又: "圣", 黑: "墨" },
+  "贝": { 化: "货", 次: "资" },
+  // radicals on the RIGHT (partner docks on the left)
+  "刂": { 至: "到", 禾: "利" },
+  "攵": { 方: "放", 古: "故", 己: "改" },
+  "页": { 丁: "顶", 工: "项", 令: "领" },
+  "力": { 工: "功", 云: "动", 又: "劝" },
+  "欠": { 口: "吹", 又: "欢" },
+  "阝": { 者: "都", 由: "邮", 交: "郊", 令: "邻" },
+  // ENCLOSING components (the partner goes inside)
+  "囗": { 木: "困", 元: "园", 口: "回" },
+  "门": { 口: "问", 日: "间", 马: "闯" },
+  "辶": { 寸: "过", 力: "边", 元: "远" },
+  "广": { 木: "床", 占: "店" },
+};
+const RADICAL_NAME = {
+  "氵": "water", "亻": "person", "扌": "hand", "木": "tree", "口": "mouth", "女": "woman",
+  "讠": "speech", "纟": "silk", "日": "sun", "忄": "heart", "火": "fire", "钅": "metal",
+  "艹": "grass", "宀": "roof", "雨": "rain", "心": "heart", "灬": "fire", "皿": "vessel",
+  "土": "earth", "贝": "shell · money", "刂": "knife", "攵": "strike", "页": "head",
+  "力": "strength", "欠": "breath", "阝": "town",
+  "囗": "enclosure", "门": "door", "辶": "walk", "广": "shelter",
+};
+// character → [pinyin, English]
+const MEANING = {
+  清: ["qīng", "clear"], 海: ["hǎi", "sea"], 江: ["jiāng", "river"], 池: ["chí", "pool"], 油: ["yóu", "oil"],
+  他: ["tā", "he"], 休: ["xiū", "rest"], 付: ["fù", "to pay"], 位: ["wèi", "place, seat"], 住: ["zhù", "to live"], 作: ["zuò", "to make, do"],
+  打: ["dǎ", "to hit"], 把: ["bǎ", "to hold"], 拍: ["pāi", "to pat, clap"], 拾: ["shí", "to pick up"], 拉: ["lā", "to pull"],
+  梅: ["méi", "plum blossom"], 村: ["cūn", "village"], 柱: ["zhù", "pillar"], 校: ["xiào", "school"],
+  吗: ["ma", "question particle"], 吧: ["ba", "suggestion particle"], 味: ["wèi", "taste"], 咕: ["gū", "to coo, murmur"],
+  妈: ["mā", "mother"], 她: ["tā", "she"], 好: ["hǎo", "good"], 姑: ["gū", "aunt"], 妹: ["mèi", "younger sister"],
+  请: ["qǐng", "please, to invite"], 讨: ["tǎo", "to discuss, ask for"], 访: ["fǎng", "to visit"], 记: ["jì", "to remember"],
+  红: ["hóng", "red"], 细: ["xì", "thin, fine"], 给: ["gěi", "to give"], 线: ["xiàn", "thread, line"],
+  晴: ["qíng", "sunny"], 时: ["shí", "time"], 昨: ["zuó", "yesterday"], 映: ["yìng", "to reflect"],
+  情: ["qíng", "feeling"], 怕: ["pà", "to fear"], 忙: ["máng", "busy"],
+  灯: ["dēng", "lamp"], 炮: ["pào", "cannon"], 烟: ["yān", "smoke"],
+  钱: ["qián", "money"], 钟: ["zhōng", "clock, bell"],
+  花: ["huā", "flower"], 苦: ["kǔ", "bitter"], 英: ["yīng", "hero, brave"],
+  字: ["zì", "written character"], 安: ["ān", "peace, safe"], 室: ["shì", "room"], 宋: ["sòng", "Song (dynasty)"],
+  雷: ["léi", "thunder"], 霜: ["shuāng", "frost"], 零: ["líng", "zero"], 雹: ["báo", "hail"],
+  想: ["xiǎng", "to think, miss"], 思: ["sī", "thought"], 恩: ["ēn", "kindness, grace"],
+  杰: ["jié", "outstanding"], 煮: ["zhǔ", "to boil"],
+  盒: ["hé", "box"], 盗: ["dào", "to steal"],
+  圣: ["shèng", "sage, holy"], 墨: ["mò", "ink"],
+  货: ["huò", "goods"], 资: ["zī", "resources"],
+  到: ["dào", "to arrive"], 利: ["lì", "benefit, sharp"],
+  放: ["fàng", "to put, release"], 故: ["gù", "old, reason"], 改: ["gǎi", "to change"],
+  顶: ["dǐng", "top, peak"], 项: ["xiàng", "item"], 领: ["lǐng", "to lead, collar"],
+  功: ["gōng", "achievement"], 动: ["dòng", "to move"], 劝: ["quàn", "to persuade"],
+  吹: ["chuī", "to blow"], 欢: ["huān", "joyful"],
+  都: ["dū / dōu", "capital / all"], 邮: ["yóu", "mail"], 郊: ["jiāo", "suburb"], 邻: ["lín", "neighbour"],
+  完: ["wán", "complete, finish"], 点: ["diǎn", "dot, point"],
+  困: ["kùn", "trapped, sleepy"], 园: ["yuán", "garden"], 回: ["huí", "to return"],
+  问: ["wèn", "to ask"], 间: ["jiān", "between, room"], 闯: ["chuǎng", "to rush, charge"],
+  过: ["guò", "to pass"], 边: ["biān", "side, edge"], 远: ["yuǎn", "far"],
+  床: ["chuáng", "bed"], 店: ["diàn", "shop"],
+};
+// Any two pieces that make a character, in either order
+const PAIR = {};
+for (const r in COMBOS) for (const c in COMBOS[r]) { PAIR[r + "|" + c] = COMBOS[r][c]; PAIR[c + "|" + r] = COMBOS[r][c]; }
+const charOf = (a, b) => PAIR[a + "|" + b];
+const canPair = (a, b) => a !== b && PAIR[a + "|" + b] !== undefined;
+const partnersOf = g => [...new Set(Object.keys(PAIR).filter(k => k.startsWith(g + "|")).map(k => k.split("|")[1]))];
+
+// Where the radical sits in the character. Its partner docks on the opposite side.
+const POSITION = {
+  "艹": "top", "宀": "top", "雨": "top",
+  "心": "bottom", "灬": "bottom", "皿": "bottom", "土": "bottom", "贝": "bottom",
+  "刂": "right", "攵": "right", "页": "right", "力": "right", "欠": "right", "阝": "right",
+  "囗": "enclose", "门": "enclose", "辶": "enclose", "广": "enclose",
+};   // default: left
+// Where the inner part sits inside an enclosing component (× glyph size)
+const INNER = { "囗": [0, 0.02], "门": [0.04, 0.1], "辶": [0.14, -0.1], "广": [0.14, 0.12] };
+function seatOffset(radical, gap) {
+  const pos = POSITION[radical] || "left";
+  if (pos === "top")    return [0, gap];      // radical on top → partner below
+  if (pos === "bottom") return [0, -gap];     // radical at bottom → partner above
+  if (pos === "right")  return [-gap, 0];     // radical on the right → partner on the left
+  if (pos === "enclose") return [INNER[radical][0] * P.size, INNER[radical][1] * P.size];   // partner goes inside
+  return [gap, 0];                            // radical on the left → partner on the right
+}
+// Where `partner` sits relative to `host`, whichever of the two is the radical
+function pairOffset(host, partner, gap) {
+  if (COMBOS[host] && COMBOS[host][partner] !== undefined) return seatOffset(host, gap);
+  const [x, y] = seatOffset(partner, gap);
+  return [-x, -y];
+}
+const RADICALS = Object.keys(COMBOS);
+const COMPONENTS = [...new Set(RADICALS.flatMap(r => Object.keys(COMBOS[r])))].filter(c => !COMBOS[c]);   // the other halves
+
+// Group every piece by where it usually sits in the characters it makes
+// (a piece that appears in several positions goes where it appears most often)
+const GROUPS = ["left", "right", "top", "bottom", "enclosing"];
+const GROUP = (() => {
+  const OPP = { left: "right", right: "left", top: "bottom", bottom: "top" };
+  const count = {};
+  const add = (g, pos) => { (count[g] = count[g] || {})[pos] = (count[g][pos] || 0) + 1; };
+  for (const r in COMBOS) {
+    const pr = POSITION[r] || "left";
+    for (const c in COMBOS[r]) {
+      if (pr === "enclose") { add(r, "enclosing"); add(c, "inside"); }
+      else { add(r, pr); add(c, OPP[pr]); }
+    }
+  }
+  const out = {};
+  for (const g in count) {
+    let best = null;
+    for (const pos of GROUPS) if (count[g][pos] && (!best || count[g][pos] > count[g][best])) best = pos;
+    out[g] = best || "enclosing";
+  }
+  return out;
+})();
+
+const FONTS = {
+  brush: '"Ma Shan Zheng", "Kaiti SC", STKaiti, KaiTi, "Noto Serif CJK SC", serif',
+  song:  '"Noto Serif SC", "Songti SC", STSong, SimSun, "Noto Serif CJK SC", serif',
+};
+
+// ---------- Fixed settings (distances are multiples of glyph size) ----------
+const S = {
+  radicalShare: 0.35,
+
+  cruiseSpeed: 2.0,
+  maxForce: 0.05,
+
+  separationRadius: 1.3,
+  alignmentRadius: 1.7,
+  crowdLimit: 3,           // more neighbours than this within alignment range = "crowded"
+  mouseRadius: 230,        // px
+
+  separationWeight: 2.6,
+  alignmentWeight: 0.6,
+  driftWeight: 1.3,
+  attractionWeight: 4.0,
+  attractSpeed: 4.5,       // how much faster than cruising a called component may travel
+  attractForce: 6.0,       // how sharply it can turn toward its target
+  attractKick: 4.0,        // the sudden pull the moment a radical is chosen
+  mouseStrength: 2.6,
+  edgeWeight: 1.5,
+
+  dockDistance: 0.45,
+  pairGap: 0.92,
+  fuseSpeed: 0.035,
+
+  attractRise: 0.15,
+  attractFall: 3.0,
+
+  trailWidth: 0.28,        // brush path width (× glyph size)
+  trailFlow: 0.16,         // ink laid down per frame along the path
+};
+
+// ---------- Live parameters (panel) ----------
+const P = {
+  population: 50, size: 70, speed: 0.5, merge: 20, evaporation: 70, diffusion: 50,
+  ink: "#c28c56", paper: "#efebe2", accent: "#c8321e", font: "song",
+};
+
+const DEFAULTS = JSON.parse(JSON.stringify(P));   // remembered for Erase · Reset
+let agents = [];
+let trail, renderer;
+let W = window.innerWidth, H = window.innerHeight;
+// Selected radicals. Each one has its own attraction that rises when clicked on
+// and fades out when clicked off:  radical → { on, t, from }
+const selection = new Map();
+function levelOf(r) {
+  const s = selection.get(r);
+  if (!s) return 0;
+  const t = (millis() - s.t) / 1000;
+  if (s.on) return Math.min(1, s.from + t / S.attractRise);
+  const f = Math.min(1, t / S.attractFall);
+  const v = s.from * (1 - f * f * (3 - 2 * f));
+  if (v <= 0) selection.delete(r);
+  return Math.max(0, v);
+}
+let mouse = { x: 0, y: 0, active: false };
+let clock = 0;
+
+// =====================================================================
+// INK TRAIL — a grid of ink amounts
+//   brush path: each agent drags a line of ink from where it was to where it is
+//   DIFFUSION:  ink spreads into neighbouring cells (paths widen and soften)
+//   EVAPORATION: a fraction of ink dries each frame (paths shrink from the tail,
+//                thin out and break into droplets)
+// =====================================================================
+class InkTrail {
+  constructor(w, h) {
+    this.cell = Math.max(3, Math.ceil(Math.sqrt((w * h) / 240000)));
+    this.gw = Math.ceil(w / this.cell);
+    this.gh = Math.ceil(h / this.cell);
+    this.a = new Float32Array(this.gw * this.gh);
+    this.b = new Float32Array(this.gw * this.gh);
+    this.bytes = new Uint8Array(this.gw * this.gh);
+    this.stamp = document.createElement("canvas");
+    this.stamp.width = this.gw; this.stamp.height = this.gh;
+    this.sctx = this.stamp.getContext("2d", { willReadFrequently: true });
+  }
+
+  // BRUSH PATH — pressure varies slowly per agent, so lines swell and thin
+  deposit(agents) {
+    const c = this.sctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, this.gw, this.gh);
+    c.setTransform(1 / this.cell, 0, 0, 1 / this.cell, 0, 0);
+    c.strokeStyle = "#000";
+    c.lineCap = "round";
+    for (const ag of agents) {
+      const dx = ag.pos.x - ag.prev.x, dy = ag.pos.y - ag.prev.y;
+      if (dx * dx + dy * dy > 2500) continue;                    // skip teleports
+      const pressure = 0.35 + 1.1 * noise(ag.noiseSeed + 50, clock * 0.008);
+      c.lineWidth = P.size * S.trailWidth * pressure;
+      c.beginPath();
+      c.moveTo(ag.prev.x, ag.prev.y);
+      c.lineTo(ag.pos.x + 0.01, ag.pos.y);
+      c.stroke();
+    }
+    const px = c.getImageData(0, 0, this.gw, this.gh).data;
+    const flow = S.trailFlow / 255;
+    for (let i = 0, j = 3; i < this.a.length; i++, j += 4) if (px[j]) this.a[i] += px[j] * flow;
+  }
+
+  // DIFFUSION + EVAPORATION
+  spread(diffusion, evaporation) {
+    const { a, b, gw, gh } = this;
+    const keep = 1 - evaporation;
+    for (let y = 1; y < gh - 1; y++) {
+      for (let x = 1, i = y * gw + 1; x < gw - 1; x++, i++) {
+        const avg = (a[i - 1] + a[i + 1] + a[i - gw] + a[i + gw]) * 0.25;
+        b[i] = Math.min(2, (a[i] + diffusion * (avg - a[i])) * keep);
+      }
+    }
+    for (let x = 0; x < gw; x++) { b[x] = 0; b[(gh - 1) * gw + x] = 0; }
+    for (let y = 0; y < gh; y++) { b[y * gw] = 0; b[y * gw + gw - 1] = 0; }
+    this.a = b; this.b = a;
+    const out = this.bytes;
+    for (let i = 0; i < b.length; i++) out[i] = b[i] >= 1 ? 255 : b[i] * 255;
+  }
+}
+
+// =====================================================================
+// RENDERER (WebGL) — mask → blur → threshold → glossy ink
+// =====================================================================
+const VERT = `
+attribute vec2 p; varying vec2 v_uv;
+void main(){ v_uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`;
+
+// 13-tap Gaussian along one direction
+const BLUR = `
+precision highp float;
+varying vec2 v_uv; uniform sampler2D u_tex; uniform vec2 u_step;
+void main(){
+  vec4 s = texture2D(u_tex, v_uv) * 0.19648;
+  s += (texture2D(u_tex, v_uv + u_step * 1.41176) + texture2D(u_tex, v_uv - u_step * 1.41176)) * 0.29691;
+  s += (texture2D(u_tex, v_uv + u_step * 3.29412) + texture2D(u_tex, v_uv - u_step * 3.29412)) * 0.09447;
+  s += (texture2D(u_tex, v_uv + u_step * 5.17647) + texture2D(u_tex, v_uv - u_step * 5.17647)) * 0.01038;
+  gl_FragColor = s;
+}`;
+
+const INK = `
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_mask;    // r = glyph ink, g = accent share (blurred)
+uniform sampler2D u_trail;   // brush paths
+uniform vec2 u_px;
+uniform float u_gain;
+uniform vec3 u_ink, u_paper, u_accent, u_char;
+
+const float TH = 0.5;        // where liquid ink begins
+
+float field(vec2 uv){
+  return texture2D(u_mask, uv).r * u_gain + texture2D(u_trail, uv).r * 0.75;
+}
+float height(vec2 uv){ return sqrt(clamp((field(uv) - TH) / 0.6, 0.0, 1.0)); }
+float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+
+void main(){
+  float F = field(v_uv);
+  vec2 e = u_px * 1.5;
+
+  // Edge (anti-aliased threshold)
+  float gx = field(v_uv + vec2(e.x, 0.0)) - field(v_uv - vec2(e.x, 0.0));
+  float gy = field(v_uv + vec2(0.0, e.y)) - field(v_uv - vec2(0.0, e.y));
+  float aa = max(length(vec2(gx, gy)) / 3.0, 0.002);
+  float inside = smoothstep(TH - aa, TH + aa, F);
+
+  // Surface normal from the ink's height → lighting
+  float hx = height(v_uv + vec2(e.x, 0.0)) - height(v_uv - vec2(e.x, 0.0));
+  float hy = height(v_uv + vec2(0.0, e.y)) - height(v_uv - vec2(0.0, e.y));
+  vec3 N = normalize(vec3(-hx * 2.2, -hy * 2.2, 1.0));
+  vec3 L = normalize(vec3(-0.45, 0.6, 0.75));          // light from top-left
+  vec3 Hh = normalize(L + vec3(0.0, 0.0, 1.0));
+  float spec = pow(max(dot(N, Hh), 0.0), 70.0);
+  float sheen = pow(max(dot(N, Hh), 0.0), 8.0) * 0.07;
+  float rim = pow(1.0 - N.z, 1.4) * 0.35;
+
+  // Ink colour (accent where the called radical / new character is)
+  vec4 m = texture2D(u_mask, v_uv);
+  float own = clamp(m.r * u_gain / max(F, 0.001), 0.0, 1.0);          // how much is glyph (vs path)
+  float acc = clamp(m.g / max(m.r, 0.001), 0.0, 1.0) * own;           // chosen radical
+  float chr = clamp(m.b / max(m.r, 0.001), 0.0, 1.0) * own;           // formed character
+  vec3 base = mix(mix(u_ink, u_accent, acc), u_char, chr);
+  float grain = (hash(gl_FragCoord.xy) - 0.5) * 0.05;
+  vec3 inkCol = base + rim * (u_paper - base) * 0.55 + sheen + spec * 0.95 + grain;
+
+  // Soft shadow cast down-right onto the paper
+  float sh = smoothstep(TH - 0.35, TH + 0.2, field(v_uv + vec2(-3.0, 5.0) * u_px));
+  vec3 paperCol = u_paper * (1.0 - 0.10 * sh) + grain * 0.4;
+
+  // Path tail: below the liquid threshold the path is a translucent wash that
+  // widens as it diffuses and fades as it evaporates
+  paperCol = mix(paperCol, u_ink, smoothstep(0.03, 0.55, texture2D(u_trail, v_uv).r) * 0.38);
+
+  // alpha = ink height for the 3D sheet: a smooth, rounded drop profile
+  float lift = smoothstep(TH - 0.12, TH + 0.9, F);
+  gl_FragColor = vec4(mix(paperCol, inkCol, inside), lift * lift * (3.0 - 2.0 * lift));
+}`;
+
+// ---- 3D pass: the finished ink image is draped over a mesh; ink height lifts it ----
+const MESH_VERT = `
+attribute vec2 a_uv;
+uniform sampler2D u_scene;
+uniform mat4 u_mvp;
+uniform vec2 u_size;
+uniform float u_amp;
+varying vec2 v_uv;
+void main(){
+  float h = texture2D(u_scene, a_uv).a;
+  vec3 p = vec3((a_uv.x - 0.5) * u_size.x, (a_uv.y - 0.5) * u_size.y, h * u_amp);
+  v_uv = a_uv;
+  gl_Position = u_mvp * vec4(p, 1.0);
+}`;
+const MESH_FRAG = `
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_scene;
+void main(){ gl_FragColor = vec4(texture2D(u_scene, v_uv).rgb, 1.0); }`;
+
+// ---- tiny matrix helpers (column-major, like WebGL expects) ----
+const M4 = {
+  perspective(fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+    return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
+  },
+  lookAt(e, t, u) {
+    let zx = e[0] - t[0], zy = e[1] - t[1], zz = e[2] - t[2];
+    let l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+    let xx = u[1] * zz - u[2] * zy, xy = u[2] * zx - u[0] * zz, xz = u[0] * zy - u[1] * zx;
+    l = Math.hypot(xx, xy, xz); xx /= l; xy /= l; xz /= l;
+    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return [xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0,
+      -(xx * e[0] + xy * e[1] + xz * e[2]), -(yx * e[0] + yy * e[1] + yz * e[2]), -(zx * e[0] + zy * e[1] + zz * e[2]), 1];
+  },
+  mul(a, b) {
+    const o = new Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+      let v = 0; for (let k = 0; k < 4; k++) v += a[k * 4 + r] * b[c * 4 + k];
+      o[c * 4 + r] = v;
+    }
+    return o;
+  },
+  invert(m) {
+    const [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] = m;
+    const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10,
+      b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12,
+      b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30,
+      b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+    const d = 1 / (b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06);
+    return [
+      (a11 * b11 - a12 * b10 + a13 * b09) * d, (a02 * b10 - a01 * b11 - a03 * b09) * d, (a31 * b05 - a32 * b04 + a33 * b03) * d, (a22 * b04 - a21 * b05 - a23 * b03) * d,
+      (a12 * b08 - a10 * b11 - a13 * b07) * d, (a00 * b11 - a02 * b08 + a03 * b07) * d, (a32 * b02 - a30 * b05 - a33 * b01) * d, (a20 * b05 - a22 * b02 + a23 * b01) * d,
+      (a10 * b10 - a11 * b08 + a13 * b06) * d, (a01 * b08 - a00 * b10 - a03 * b06) * d, (a30 * b04 - a31 * b02 + a33 * b00) * d, (a21 * b02 - a20 * b04 - a23 * b00) * d,
+      (a11 * b07 - a10 * b09 - a12 * b06) * d, (a00 * b09 - a01 * b07 + a02 * b06) * d, (a31 * b01 - a30 * b03 - a32 * b00) * d, (a20 * b03 - a21 * b01 + a22 * b00) * d,
+    ];
+  },
+  apply(m, v) {
+    const o = [0, 0, 0, 0];
+    for (let r = 0; r < 4; r++) o[r] = m[r] * v[0] + m[4 + r] * v[1] + m[8 + r] * v[2] + m[12 + r] * v[3];
+    return o;
+  },
+};
+
+// ---- camera: orbit around the paper (drag to rotate, scroll to zoom) ----
+const cam = { yaw: 0, pitch: 0.95, zoom: 1, dragging: false, lastX: 0, lastY: 0, invVP: null };
+
+class InkRenderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    const gl = (this.gl = canvas.getContext("webgl", { antialias: true, alpha: false, depth: true }));
+    if (!gl) throw new Error("WebGL not available");
+    this.mask = document.createElement("canvas");
+    this.mctx = this.mask.getContext("2d");
+
+    this.blurProg = this.program(VERT, BLUR);
+    this.inkProg = this.program(VERT, INK);
+    this.meshProg = this.program(MESH_VERT, MESH_FRAG);
+    this.uint = gl.getExtension("OES_element_index_uint");
+    this.quadBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+
+    this.maskTex = this.texture();
+    this.trailTex = this.texture();
+    this.resize();
+  }
+
+  program(vs, fs) {
+    const gl = this.gl;
+    const sh = (type, src) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    };
+    const p = gl.createProgram();
+    gl.attachShader(p, sh(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    p.u = name => gl.getUniformLocation(p, name);
+    return p;
+  }
+
+  texture() {
+    const gl = this.gl, t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+
+  target(w, h) {
+    const gl = this.gl, tex = this.texture();
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { tex, fb };
+  }
+
+  resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    this.canvas.width = Math.round(W * dpr);
+    this.canvas.height = Math.round(H * dpr);
+    this.mScale = 0.5;                                   // mask is half resolution
+    this.mask.width = Math.ceil(W * this.mScale);
+    this.mask.height = Math.ceil(H * this.mScale);
+    this.A = this.target(this.mask.width, this.mask.height);
+    this.B = this.target(this.mask.width, this.mask.height);
+    this.scene = this.target(this.canvas.width, this.canvas.height);   // the flat ink image
+    this.buildMesh();
+  }
+
+  // A finely divided sheet of paper; each vertex is lifted by the ink height
+  buildMesh() {
+    const gl = this.gl;
+    const gx = this.uint ? 480 : 250;
+    const gy = Math.max(2, Math.round(gx * H / W));
+    const uv = new Float32Array((gx + 1) * (gy + 1) * 2);
+    for (let y = 0, k = 0; y <= gy; y++) for (let x = 0; x <= gx; x++) { uv[k++] = x / gx; uv[k++] = y / gy; }
+    const idx = new (this.uint ? Uint32Array : Uint16Array)(gx * gy * 6);
+    for (let y = 0, k = 0; y < gy; y++) for (let x = 0; x < gx; x++) {
+      const i = y * (gx + 1) + x;
+      idx[k++] = i; idx[k++] = i + 1; idx[k++] = i + gx + 1;
+      idx[k++] = i + 1; idx[k++] = i + gx + 2; idx[k++] = i + gx + 1;
+    }
+    this.meshUV = this.meshUV || gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.meshUV);
+    gl.bufferData(gl.ARRAY_BUFFER, uv, gl.STATIC_DRAW);
+    this.meshIdx = this.meshIdx || gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.meshIdx);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+    this.meshCount = idx.length;
+  }
+
+  // Camera matrix for this frame (also stored inverted, to turn the mouse into a paper position)
+  camera() {
+    const aspect = this.canvas.width / this.canvas.height;
+    const fov = 0.7;
+    const fit = Math.max(H, W / aspect) * 0.5 / Math.tan(fov / 2);
+    // Keep the paper in the space BELOW the component box: shift the view down
+    // by half the box's height and pull back so the sheet still fits.
+    const box = document.querySelector(".picker-box");
+    const boxBottom = box ? box.getBoundingClientRect().bottom + 8 : 0;
+    const free = Math.max(0.4, 1 - boxBottom / window.innerHeight);   // share of the screen left below the box
+    const dist = fit * 1.05 / cam.zoom / Math.sqrt(free);
+    const yaw = cam.yaw + Math.sin(clock * 0.002) * 0.12;          // gentle automatic sway
+    const e = [dist * Math.cos(cam.pitch) * Math.sin(yaw), -dist * Math.cos(cam.pitch) * Math.cos(yaw), dist * Math.sin(cam.pitch)];
+    const shift = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -(1 - free) * 0.55, 0, 1];   // move the image down on screen
+    const vp = M4.mul(shift, M4.mul(M4.perspective(fov, aspect, dist * 0.05, dist * 4), M4.lookAt(e, [0, 0, 0], [0, 0, 1])));
+    cam.invVP = M4.invert(vp);
+    return vp;
+  }
+
+  pass(prog, fb, w, h, tex, step) {
+    const gl = this.gl;
+    gl.useProgram(prog);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.viewport(0, 0, w, h);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniform1i(prog.u("u_tex"), 0);
+    gl.uniform2f(prog.u("u_step"), step[0], step[1]);
+    this.quad(prog);
+  }
+
+  quad(prog) {
+    const gl = this.gl, loc = gl.getAttribLocation(prog, "p");
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuf);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  render(agents, trail) {
+    const gl = this.gl;
+    const merge = P.merge / 100;
+
+    // 1. Draw every glyph into the mask (red = ink, green = accent share)
+    const c = this.mctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = "source-over";
+    c.globalAlpha = 1;
+    c.fillStyle = "#000";
+    c.fillRect(0, 0, this.mask.width, this.mask.height);
+    c.setTransform(this.mScale, 0, 0, this.mScale, 0, 0);
+    c.globalCompositeOperation = "lighter";
+    for (const a of agents) a.draw(c);
+
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.mask);
+
+    // 2. Blur → the wider the blur, the more neighbouring glyphs flow together
+    const mw = this.mask.width, mh = this.mask.height;
+    const radius = P.size * this.mScale * (0.06 + 0.22 * merge);   // in mask pixels
+    const st = radius / 6 / Math.SQRT2;
+    this.pass(this.blurProg, this.A.fb, mw, mh, this.maskTex, [st / mw, 0]);
+    this.pass(this.blurProg, this.B.fb, mw, mh, this.A.tex, [0, st / mh]);
+    this.pass(this.blurProg, this.A.fb, mw, mh, this.B.tex, [st / mw, 0]);
+    this.pass(this.blurProg, this.B.fb, mw, mh, this.A.tex, [0, st / mh]);
+
+    // 3. Brush paths
+    gl.bindTexture(gl.TEXTURE_2D, this.trailTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, trail.gw, trail.gh, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, trail.bytes);
+
+    // 4. Threshold + light → into an off-screen image (alpha = ink height)
+    const p = this.inkProg;
+    gl.useProgram(p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.scene.fb);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.B.tex);
+    gl.uniform1i(p.u("u_mask"), 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.trailTex);
+    gl.uniform1i(p.u("u_trail"), 1);
+    gl.uniform2f(p.u("u_px"), 1 / this.canvas.width, 1 / this.canvas.height);
+    gl.uniform1f(p.u("u_gain"), 1.7 + 1.6 * merge);
+    gl.uniform3fv(p.u("u_ink"), rgb01(P.ink));
+    gl.uniform3fv(p.u("u_paper"), rgb01(P.paper));
+    gl.uniform3fv(p.u("u_accent"), rgb01(P.accent));
+    gl.uniform3fv(p.u("u_char"), rgb01(P.accent));   // formed characters share the red accent
+    this.quad(p);
+
+    // 5. 3D: drape the ink image over the mesh and lift it by the ink height
+    const m = this.meshProg;
+    gl.useProgram(m);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    const bg = rgb01(P.paper).map(v => v * 0.86);
+    gl.clearColor(bg[0], bg[1], bg[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.scene.tex);
+    gl.uniform1i(m.u("u_scene"), 0);
+    gl.uniformMatrix4fv(m.u("u_mvp"), false, new Float32Array(this.camera()));
+    gl.uniform2f(m.u("u_size"), W, H);
+    gl.uniform1f(m.u("u_amp"), P.size * 0.32);
+    const loc = gl.getAttribLocation(m, "a_uv");
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.meshUV);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.meshIdx);
+    gl.drawElements(gl.TRIANGLES, this.meshCount, this.uint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+    gl.disable(gl.DEPTH_TEST);
+  }
+}
+
+// Where on the paper is the mouse pointing? (cast a ray from the camera onto the sheet)
+function screenToPaper(cx, cy) {
+  if (!cam.invVP) return null;
+  const nx = (cx / window.innerWidth) * 2 - 1, ny = 1 - (cy / window.innerHeight) * 2;
+  const a = M4.apply(cam.invVP, [nx, ny, -1, 1]), b = M4.apply(cam.invVP, [nx, ny, 1, 1]);
+  const n = [a[0] / a[3], a[1] / a[3], a[2] / a[3]], f = [b[0] / b[3], b[1] / b[3], b[2] / b[3]];
+  if (Math.abs(n[2] - f[2]) < 1e-6) return null;
+  const t = n[2] / (n[2] - f[2]);
+  if (t < 0) return null;
+  const wx = n[0] + (f[0] - n[0]) * t, wy = n[1] + (f[1] - n[1]) * t;
+  return { x: wx + W / 2, y: H / 2 - wy };
+}
+function rgb01(h) { const n = parseInt(h.slice(1), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
+
+// =====================================================================
+// AGENT
+// =====================================================================
+class Agent {
+  constructor(x, y) {
+    this.pos = createVector(x, y);
+    this.prev = this.pos.copy();
+    this.vel = p5.Vector.random2D().mult(S.cruiseSpeed);
+    this.acc = createVector(0, 0);
+    this.tilt = 0;
+    this.glyph = random() < S.radicalShare ? random(RADICALS) : random(COMPONENTS);
+
+    this.partner = null;   // on a radical: the component docked to its right
+    this.host = null;      // on a component: the radical it is docked to
+    this.fusion = 0;       // 0 = two parts, 1 = one complete character
+
+    this.speedFactor = random(0.75, 1.25);
+    this.alignTaste = random(0.4, 1.2);
+    this.noiseSeed = random(1000);
+    this.noiseRate = random(0.0008, 0.0025); // how quickly its wandering changes (slow = travels far in one direction)
+    this.wanderSpread = random(1.5, 3);      // how widely it wanders
+    this.target = null;                      // the radical it is being pulled toward
+    this.pulse = 0;                          // brief swell when its radical is chosen
+  }
+
+  isHost()    { return levelOf(this.glyph) > 0; }
+  // strongest pull from any selected radical this component can join (0 = none)
+  pullLevel() {
+    if (this.isHost()) return 0;
+    let best = 0;
+    for (const r of selection.keys()) if (canPair(r, this.glyph)) best = Math.max(best, levelOf(r));
+    return best;
+  }
+  isPartner() { return this.pullLevel() > 0; }
+
+  update(neighbours, hosts) {
+    const attraction = this.isHost() ? levelOf(this.glyph) : this.pullLevel();
+    if (this.host) return;   // docked components ride along with their radical
+    this.prev.set(this.pos.x, this.pos.y);
+
+    const calledHost = attraction > 0 && this.isHost();
+    const pulled = attraction > 0 && this.isPartner();
+    this.speed = S.cruiseSpeed * P.speed * this.speedFactor * (calledHost ? 1 - 0.7 * attraction : 1);
+    this.maxForce = S.maxForce * P.speed;
+    this.target = pulled ? this.findTarget(hosts.filter(h => canPair(h.glyph, this.glyph))) : null;
+    this.pulse *= 0.94;
+
+    this.acc.add(this.separation(neighbours, attraction).mult(S.separationWeight));
+    this.acc.add(this.alignment(neighbours).mult(S.alignmentWeight * this.alignTaste * (1 - attraction * 0.8)));
+    this.acc.add(this.drift().mult(S.driftWeight));
+    this.acc.add(this.mouseRepulsion());
+    if (pulled) this.acc.add(this.attraction().mult(S.attractionWeight * attraction));
+    this.acc.add(this.stayOnScreen().mult(S.edgeWeight));
+
+    this.vel.add(this.acc);
+    const sp = this.vel.mag();
+    if (sp > this.speed) this.vel.mult(pulled ? 0.995 : 0.97);   // the pull is allowed to carry speed
+    if (sp < this.speed * 0.4) this.vel.setMag(this.speed * 0.4);
+    this.vel.limit(this.speed * (pulled ? S.attractSpeed + 1 : 6));   // room for a dramatic scatter
+    this.pos.add(this.vel);
+    this.acc.set(0, 0);
+
+    this.tilt = lerp(this.tilt, constrain(this.vel.x * 0.04, -0.18, 0.18), 0.1);
+    this.updatePair();
+  }
+
+  steerToward(direction, speed = this.speed, force = this.maxForce) {
+    if (direction.magSq() === 0) return createVector(0, 0);
+    return direction.copy().setMag(speed).sub(this.vel).limit(force);
+  }
+
+  // ---------- RULE 1 · SEPARATION ----------
+  separation(neighbours, attraction) {
+    const radius = S.separationRadius * P.size;
+    const away = createVector(0, 0);
+    let crowd = 0;
+    for (const { other, d } of neighbours) {
+      if (other === this.target || other.target === this) continue;   // don't push away a docking partner
+      if (d < radius && d > 0) {
+        away.add(p5.Vector.sub(this.pos, other.pos).setMag(1 / d));
+        crowd++;
+      }
+    }
+    if (crowd === 0) return createVector(0, 0);
+    // Crowding amplifies the push, and lets it turn harder — so clusters visibly burst apart
+    return this.steerToward(away, this.speed, this.maxForce * 2).mult((1 + crowd * 0.5) * (1 + attraction));
+  }
+
+  // ---------- RULE 2 · ALIGNMENT ----------
+  // Gradually match the average heading of nearby agents. But when it is
+  // crowded, don't follow the group: peel off sideways, toward whichever
+  // side has more room. So the flock keeps splitting and re-forming
+  // instead of marching in one direction.
+  alignment(neighbours) {
+    const radius = S.alignmentRadius * P.size;
+    const avg = createVector(0, 0), centre = createVector(0, 0);
+    let n = 0;
+    for (const { other, d } of neighbours) {
+      if (d < radius) { avg.add(other.vel); centre.add(other.pos); n++; }
+    }
+    if (n === 0 || avg.magSq() === 0) return createVector(0, 0);
+    centre.div(n);
+
+    const crowding = constrain((n - S.crowdLimit) / S.crowdLimit, 0, 1);   // 0 = roomy, 1 = packed
+    // The "side" direction: perpendicular to the group's heading, pointing away from the crowd
+    const side = createVector(-avg.y, avg.x);
+    if (side.dot(p5.Vector.sub(this.pos, centre)) < 0) side.mult(-1);
+    const heading = avg.copy().normalize().mult(1 - crowding).add(side.normalize().mult(crowding));
+    return this.steerToward(heading);
+  }
+
+  // ---------- RULE 3 · DRIFTING ----------
+  drift() {
+    const angle = noise(this.noiseSeed, clock * this.noiseRate) * TWO_PI * this.wanderSpread + this.noiseSeed;
+    return p5.Vector.fromAngle(angle).mult(this.maxForce);
+  }
+
+  // ---------- RULE 4 · MOUSE REPULSION ----------
+  mouseRepulsion() {
+    if (!mouse.active || this.fusion > 0.5) return createVector(0, 0);   // finished characters stay to be read
+    const flee = createVector(this.pos.x - mouse.x, this.pos.y - mouse.y);
+    const d = flee.mag();
+    if (d > S.mouseRadius || d === 0) return createVector(0, 0);
+    return flee.setMag(sq(1 - d / S.mouseRadius) * S.mouseStrength * P.speed);
+  }
+
+  // ---------- RULE 5 · ATTRACTION TO A MATCHING RADICAL ----------
+  // Every component that can combine with the chosen radical is pulled hard
+  // toward the NEAREST free copy of it, aiming for the empty seat on its
+  // right. The first (usually the closest) to arrive takes the seat and
+  // forms the character. Latecomers re-target another free radical, or,
+  // if none is left, crowd around the nearest one until the pull fades.
+  findTarget(hosts) {
+    let free = null, bestFree = Infinity, any = null, bestAny = Infinity;
+    for (const h of hosts) {
+      const d = p5.Vector.sub(h.pos, this.pos).magSq();
+      if (d < bestAny) { bestAny = d; any = h; }
+      if (!h.partner && d < bestFree) { bestFree = d; free = h; }
+    }
+    this.seatFree = !!free;
+    return free || any;
+  }
+
+  attraction() {
+    const h = this.target;
+    if (!h) return createVector(0, 0);
+
+    if (!this.seatFree) {
+      // No seat left: hover around the radical at a polite distance
+      const toward = p5.Vector.sub(h.pos, this.pos);
+      const d = toward.mag();
+      if (d < P.size * 1.8) return createVector(0, 0);
+      return this.steerToward(toward, this.speed * 1.5, this.maxForce * 1.5);
+    }
+
+    const [sx, sy] = pairOffset(h.glyph, this.glyph, P.size * S.pairGap);
+    const seat = createVector(h.pos.x + sx, h.pos.y + sy);
+    const toSeat = p5.Vector.sub(seat, this.pos);
+    const d = toSeat.mag();
+    if (d < P.size * S.dockDistance) { h.partner = this; this.host = h; this.target = null; return createVector(0, 0); }
+
+    // Fast and strong from afar, easing off only in the last stretch
+    const arrive = constrain(d / (P.size * 2.5), 0.3, 1);
+    return this.steerToward(toSeat, this.speed * S.attractSpeed * arrive, this.maxForce * S.attractForce);
+  }
+
+  // Fuse while the attraction lasts; split apart when it fades
+  updatePair() {
+    const p = this.partner;
+    if (!p) return;
+    const s = selection.get(this.glyph);
+    const together = !!s && s.on;                 // stays joined while its radical is selected
+    this.fusion = constrain(this.fusion + (together ? S.fuseSpeed : -S.fuseSpeed * 1.5), 0, 1);
+
+    const [ox, oy] = pairOffset(this.glyph, p.glyph, P.size * lerp(S.pairGap, 0.55, this.fusion));
+    p.prev.set(p.pos.x, p.pos.y);
+    p.pos.set(this.pos.x + ox, this.pos.y + oy);
+    p.vel.set(this.vel.x, this.vel.y);
+    p.tilt = this.tilt;
+
+    if (!together && this.fusion === 0) {
+      p.vel.add(createVector(random(0.5, 1.5), random(-1, 1)).mult(P.speed));
+      p.host = null;
+      this.partner = null;
+    }
+  }
+
+  // ---------- BOUNDARY ----------
+  stayOnScreen() {
+    const m = Math.max(60, P.size * 1.5);
+    const top = m + P.size * 0.5, right = W - m - P.size, bottom = H - m - P.size * 0.5;  // room for the picker and a partner
+    const back = createVector(0, 0);
+    const left = m + P.size;                                                     // room for a partner on the left
+    if (this.pos.x < left)     back.x = (left - this.pos.x) / m;
+    if (this.pos.x > right)    back.x = (right - this.pos.x) / m;
+    if (this.pos.y < top)      back.y = (top - this.pos.y) / m;
+    if (this.pos.y > bottom)   back.y = (bottom - this.pos.y) / m;
+    return this.steerToward(back).mult(1 + back.mag() * 2);
+  }
+
+  // ---------- DRAWING (into the mask) ----------
+  // Red channel = ink. Green channel = how much of it is accent-coloured.
+  draw(ctx) {
+    if (this.host) return;
+    const size = P.size;
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.rotate(this.tilt);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = size * 0.045;                   // thickens the strokes
+
+    const ink = (g, b = 0) => `rgb(255,${Math.round(255 * g)},${Math.round(255 * b)})`;   // r ink · g chosen · b formed
+    const write = (txt, x, y, sz, g, b = 0) => {
+      ctx.font = `${sz}px ${FONTS[P.font]}`;
+      ctx.fillStyle = ctx.strokeStyle = ink(g, b);
+      ctx.fillText(txt, x, y);
+      ctx.strokeText(txt, x, y);
+    };
+    const hostGlow = this.isHost() ? levelOf(this.glyph) : 0;
+
+    const p = this.partner, f = this.fusion;
+    if (!p) {
+      write(this.glyph, 0, 0, size * (1 + 0.15 * this.pulse), hostGlow);   // swells briefly when chosen
+    } else {
+      // partner's offset (rotate back into this glyph's tilted frame)
+      const dx = p.pos.x - this.pos.x, dy = p.pos.y - this.pos.y;
+      const c = Math.cos(-this.tilt), s = Math.sin(-this.tilt);
+      const ox = dx * c - dy * s, oy = dx * s + dy * c;
+      const enclHost = POSITION[this.glyph] === "enclose", enclPartner = POSITION[p.glyph] === "enclose";
+      ctx.globalAlpha = 1 - f;                      // the two parts melt away…
+      write(this.glyph, 0, 0, size * (enclPartner ? 0.55 : 1), hostGlow);   // an inner part is drawn small
+      write(p.glyph, ox, oy, size * (enclHost ? 0.55 : 1), 0);
+      ctx.globalAlpha = f * 0.85;                   // …into one complete character
+      const [cx, cy] = enclHost ? [0, 0] : enclPartner ? [ox, oy] : [ox / 2, oy / 2];
+      write(charOf(this.glyph, p.glyph), cx, cy, size * 1.2, 0, 1);
+    }
+    ctx.restore();
+  }
+}
+
+// =====================================================================
+// SKETCH
+// =====================================================================
+function setup() {
+  noCanvas();
+  renderer = new InkRenderer(document.getElementById("stage"));
+  trail = new InkTrail(W, H);
+
+  const stage = document.getElementById("stage");
+  window.addEventListener("pointermove", e => {
+    if (cam.dragging) {
+      cam.yaw -= (e.clientX - cam.lastX) * 0.005;
+      cam.pitch = constrain(cam.pitch + (e.clientY - cam.lastY) * 0.005, 0.35, 1.55);
+      cam.lastX = e.clientX; cam.lastY = e.clientY;
+      return;
+    }
+    mouse.cx = e.clientX; mouse.cy = e.clientY;
+    const pt = screenToPaper(e.clientX, e.clientY);
+    if (pt) { mouse.x = pt.x; mouse.y = pt.y; }
+    mouse.active = !!pt && e.target === stage;
+  });
+  stage.addEventListener("pointerdown", e => { cam.dragging = true; mouse.active = false; cam.lastX = e.clientX; cam.lastY = e.clientY; });
+  window.addEventListener("pointerup", () => (cam.dragging = false));
+  stage.addEventListener("pointerleave", () => (mouse.active = false));
+  stage.addEventListener("wheel", e => { e.preventDefault(); cam.zoom = constrain(cam.zoom * Math.exp(-e.deltaY * 0.001), 0.6, 3); }, { passive: false });
+
+  setupPanel();
+  setupPicker();
+  setupIntro();
+  syncPopulation();
+  loadFontGlyphs();
+}
+
+function syncPopulation() {
+  while (agents.length < P.population) agents.push(new Agent(random(80, W - 120), random(130, H - 80)));
+  let guard = 1000;
+  while (agents.length > P.population && guard--) {
+    const i = floor(random(agents.length));
+    if (agents[i].host || agents[i].partner) continue;   // don't break pairs
+    agents.splice(i, 1);
+  }
+}
+
+function draw() {
+  updateTooltip();
+  if (paused) { renderer.render(agents, trail); return; }   // wait behind the intro
+  clock += P.speed;
+  const hosts = agents.filter(a => a.isHost());
+  const sight = S.alignmentRadius * P.size;
+
+  // --- Behaviour: every agent reacts only to what is near it ---
+  for (const a of agents) {
+    const neighbours = [];
+    for (const b of agents) {
+      if (a === b || b === a.partner || b === a.host) continue;
+      const d = dist(a.pos.x, a.pos.y, b.pos.x, b.pos.y);
+      if (d < sight) neighbours.push({ other: b, d });
+    }
+    a.update(neighbours, hosts);
+  }
+
+  // --- Ink paths: brush → diffusion → evaporation ---
+  trail.deposit(agents);
+  trail.spread((P.diffusion / 100) * 0.6, 0.0006 + (P.evaporation / 100) * 0.02);
+
+  // --- Render wet ink ---
+  renderer.render(agents, trail);
+}
+
+// Click a radical: select it (attraction on). Click again: deselect (attraction fades, pairs split).
+function choose(radical) {
+  const cur = selection.get(radical);
+  if (cur && cur.on) {
+    selection.set(radical, { on: false, t: millis(), from: levelOf(radical) });
+    updatePicker();
+    return;
+  }
+  selection.set(radical, { on: true, t: millis(), from: levelOf(radical) });
+  updatePicker();
+
+  // Make sure there is something to watch: at least 2 copies of the radical
+  // and at least 4 components that can join it (random agents change identity)
+  const comps = partnersOf(radical);
+  const busy = a => a.host || a.partner || a.isHost() || a.isPartner();
+  const free = () => agents.filter(a => !busy(a) && a.glyph !== radical && !comps.includes(a.glyph));
+  while (agents.filter(a => a.glyph === radical).length < 2 && free().length) random(free()).glyph = radical;
+  while (agents.filter(a => comps.includes(a.glyph)).length < 4 && free().length) random(free()).glyph = random(comps);
+
+  // The sudden pull: chosen radicals swell, and every matching component
+  // gets an immediate tug toward the nearest one
+  const hosts = agents.filter(a => a.glyph === radical);
+  for (const h of hosts) h.pulse = 1;
+  for (const a of agents) {
+    if (a.host || !canPair(radical, a.glyph)) continue;
+    let near = null, best = Infinity;
+    for (const h of hosts) { const d = dist(a.pos.x, a.pos.y, h.pos.x, h.pos.y); if (d < best) { best = d; near = h; } }
+    if (near) a.vel.add(p5.Vector.sub(near.pos, a.pos).setMag(S.cruiseSpeed * P.speed * S.attractKick));
+  }
+}
+
+function windowResized() {
+  W = window.innerWidth; H = window.innerHeight;
+  renderer.resize();
+  trail = new InkTrail(W, H);
+}
+
+// ---------- UI ----------
+function setupPicker() {
+  const box = document.getElementById("picker");
+  const label = t => { const s = document.createElement("span"); s.className = "group"; s.textContent = t; box.appendChild(s); };
+  const names = { left: "左侧部件 left", right: "右侧部件 right", top: "顶部部件 top", bottom: "底部部件 bottom", enclosing: "包围部件 enclosing" };
+  const all = [...RADICALS, ...COMPONENTS];
+  GROUPS.forEach((pos, gi) => {
+    if (gi === 1 || gi === 2) { const br = document.createElement("span"); br.className = "break"; box.appendChild(br); }
+    else if (gi > 2) { const d = document.createElement("span"); d.className = "divider"; box.appendChild(d); }
+    label(names[pos]);
+    for (const g of all.filter(g => GROUP[g] === pos)) addButton(g, true);
+  });
+  function addButton(r, small) {
+    const b = document.createElement("button");
+    if (small) b.className = "comp";
+    b.textContent = r;
+    b.title = partnersOf(r).map(x => charOf(r, x)).join(" ");
+    b.addEventListener("click", () => choose(r));
+    box.appendChild(b);
+  }
+}
+function updatePicker() {
+  for (const b of document.querySelectorAll("#picker button")) {
+    const s = selection.get(b.textContent);
+    b.classList.toggle("on", !!s && s.on);
+  }
+}
+
+// ---------- Intro: how to play + every component and the characters it can make ----------
+let paused = true;
+function setupIntro() {
+  const posName = { left: "sits on the left", right: "sits on the right", top: "sits on top", bottom: "sits at the bottom", enclose: "wraps around the other part" };
+  let html = `<h1>偏旁 · Component Flock</h1>
+  <p class="sub">Chinese characters are built from smaller parts. Here, every part is alive.</p>
+  <h2>How to play</h2>
+  <ul>
+    <li>Every floating piece is a <b>component</b> (偏旁部件) — one part of a Chinese character.</li>
+    <li>They drift on their own, keep their distance when crowded, and loosely follow their neighbours.</li>
+    <li><b>Move your mouse</b> to scatter them. When it leaves, they regroup by themselves.</li>
+    <li><b>Click a component</b> in the top box (grouped by where it usually sits: left, right, top, bottom, or enclosing). Every piece that can combine with it is pulled toward the nearest copy — the first to arrive joins it and forms a full character, in red.</li>
+    <li>Select several at once. <b>Click again to release</b> — the character splits back into parts.</li>
+    <li><b>Hover over a red character</b> to see what it means.</li>
+    <li>Use <b>Parameters</b> to change how many pieces there are, their size and speed, and how the ink merges, evaporates and spreads. <b>Erase · Reset</b> starts over.</li>
+  </ul>
+  <h2>Components and the characters they make</h2>
+  <div class="rads">`;
+  for (const r of RADICALS) {
+    html += `<div class="rad"><div class="rad-h"><b>${r}</b><span>${RADICAL_NAME[r]} · ${posName[POSITION[r] || "left"]}</span></div><div class="chars">`;
+    for (const c in COMBOS[r]) {
+      const ch = COMBOS[r][c], [py, en] = MEANING[ch] || ["", ""];
+      html += `<span><em>${ch}</em>${c} · ${py} · ${en}</span>`;
+    }
+    html += `</div></div>`;
+  }
+  html += `</div><button class="start" id="start">Start</button>`;
+  document.getElementById("introCard").innerHTML = html;
+  const intro = document.getElementById("intro");
+  document.getElementById("start").addEventListener("click", () => { intro.classList.add("hidden"); paused = false; });
+  document.getElementById("howto").addEventListener("click", e => { e.preventDefault(); intro.classList.remove("hidden"); paused = true; });
+}
+
+// ---------- Hover a finished character → its meaning ----------
+function updateTooltip() {
+  const tip = document.getElementById("tip");
+  let found = null;
+  if (mouse.active && !paused) {
+    for (const a of agents) {
+      if (!a.partner || a.fusion < 0.5) continue;
+      const cx = (a.pos.x + a.partner.pos.x) / 2, cy = (a.pos.y + a.partner.pos.y) / 2;
+      if (Math.hypot(mouse.x - cx, mouse.y - cy) < P.size * 0.75) { found = charOf(a.glyph, a.partner.glyph); break; }
+    }
+  }
+  if (!found) { tip.classList.add("hidden"); return; }
+  const [py, en] = MEANING[found] || ["", ""];
+  tip.innerHTML = `<b>${found}</b><i>${py}</i>${en}`;
+  tip.style.left = mouse.cx + "px";
+  tip.style.top = mouse.cy + "px";
+  tip.classList.remove("hidden");
+}
+
+function setupPanel() {
+  const fmt = {
+    population: v => v, size: v => v + "px", speed: v => (+v).toFixed(1) + "×",
+    merge: v => v, evaporation: v => v, diffusion: v => v,
+  };
+  for (const id of Object.keys(fmt)) {
+    const el = document.getElementById(id);
+    const out = el.parentElement.querySelector("output");
+    const sync = () => {
+      P[id] = +el.value;
+      out.textContent = fmt[id](el.value);
+      if (id === "population") syncPopulation();
+    };
+    el.addEventListener("input", sync);
+    sync();
+  }
+  for (const id of ["ink", "paper", "accent"]) {
+    const el = document.getElementById(id);
+    el.addEventListener("input", () => {
+      P[id] = el.value;
+      document.documentElement.style.setProperty("--" + id, el.value);
+      if (id === "ink") document.documentElement.style.setProperty("--ui", el.value);   // text follows the ink
+    });
+  }
+  for (const b of document.querySelectorAll(".fonts button")) {
+    b.addEventListener("click", () => {
+      P.font = b.dataset.font;
+      document.querySelectorAll(".fonts button").forEach(x => x.classList.toggle("on", x === b));
+      document.documentElement.style.setProperty("--font", FONTS[P.font]);
+      loadFontGlyphs();
+    });
+  }
+  document.documentElement.style.setProperty("--font", FONTS[P.font]);
+  document.getElementById("erase").addEventListener("click", eraseAll);
+  document.getElementById("toggle").addEventListener("click", () =>
+    document.getElementById("panel").classList.toggle("closed"));
+}
+
+// ERASE · RESET — wipe the ink, release every radical, restore all settings, start a fresh flock
+function eraseAll() {
+  selection.clear();
+  updatePicker();
+  Object.assign(P, JSON.parse(JSON.stringify(DEFAULTS)));
+  for (const id of ["population", "size", "speed", "merge", "evaporation", "diffusion"]) {
+    const el = document.getElementById(id);
+    el.value = DEFAULTS[id];
+    el.dispatchEvent(new Event("input"));
+  }
+  for (const id of ["ink", "paper", "accent"]) {
+    document.getElementById(id).value = DEFAULTS[id];
+    document.documentElement.style.setProperty("--" + id, DEFAULTS[id]);
+  }
+  document.documentElement.style.setProperty("--ui", DEFAULTS.ink);
+  document.querySelectorAll(".fonts button").forEach(b => b.classList.toggle("on", b.dataset.font === DEFAULTS.font));
+  document.documentElement.style.setProperty("--font", FONTS[DEFAULTS.font]);
+  if (typeof cam !== "undefined") { cam.yaw = 0; cam.pitch = 0.95; cam.zoom = 1; }   // 3D view
+  agents = [];
+  trail = new InkTrail(W, H);
+  syncPopulation();
+}
+
+function loadFontGlyphs() {
+  if (!document.fonts) return;
+  const all = RADICALS.join("") + COMPONENTS.join("") + RADICALS.map(r => Object.values(COMBOS[r]).join("")).join("");
+  document.fonts.load(`40px ${FONTS[P.font].split(",")[0]}`, all).catch(() => {});
+}
+</script>
+</body>
+</html>
